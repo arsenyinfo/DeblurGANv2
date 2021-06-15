@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-from torch.nn import init
 import functools
-from torch.autograd import Variable
 import numpy as np
+import segmentation_models_pytorch as smp
 from models.fpn_mobilenet import FPNMobileNet
 from models.fpn_inception import FPNInception
 from models.fpn_inception_simple import FPNInceptionSimple
@@ -268,28 +267,41 @@ def get_fullD(model_config):
     return model_d
 
 
-def get_generator(model_config):
-    generator_name = model_config['g_name']
-    if generator_name == 'resnet':
-        model_g = ResnetGenerator(norm_layer=get_norm_layer(norm_type=model_config['norm_layer']),
-                                  use_dropout=model_config['dropout'],
-                                  n_blocks=model_config['blocks'],
-                                  learn_residual=model_config['learn_residual'])
-    elif generator_name == 'fpn_mobilenet':
-        model_g = FPNMobileNet(norm_layer=get_norm_layer(norm_type=model_config['norm_layer']))
-    elif generator_name == 'fpn_inception':
-        model_g = FPNInception(norm_layer=get_norm_layer(norm_type=model_config['norm_layer']))
-    elif generator_name == 'fpn_inception_simple':
-        model_g = FPNInceptionSimple(norm_layer=get_norm_layer(norm_type=model_config['norm_layer']))
-    elif generator_name == 'fpn_dense':
-        model_g = FPNDense()
-    elif generator_name == 'unet_seresnext':
-        model_g = UNetSEResNext(norm_layer=get_norm_layer(norm_type=model_config['norm_layer']),
-                                pretrained=model_config['pretrained'])
-    else:
-        raise ValueError("Generator Network [%s] not recognized." % generator_name)
+def get_generator(model_config: dict) -> nn.Module:
+    model = smp.FPN(encoder_name='timm-efficientnet-lite1', activation=None)
+    replace_dict = {nn.BatchNorm2d: (nn.InstanceNorm2d, transfer_bn_params)}
+    model = replace_modules(model, replace_dict)
+    model = nn.Sequential(model, nn.Tanh())
+    return nn.DataParallel(model)
 
-    return nn.DataParallel(model_g)
+
+def replace_modules(module, replace_dict, excluded_names=None, name="features"):
+    """
+    https://discuss.pytorch.org/t/replacing-convs-modules-with-custom-convs-then-notimplementederror/17736/2
+    """
+    if excluded_names is None:
+        excluded_names = []
+
+    for attr_str in dir(module):
+        target_attr = getattr(module, attr_str)
+
+        if type(target_attr) in replace_dict:
+            from_module = type(target_attr)
+            to_module, fn = replace_dict[from_module]
+            args, kwargs = fn(target_attr, name, attr_str)
+            setattr(module, attr_str, to_module(*args, **kwargs))
+
+    for submodule_name, submodule in module.named_children():
+        if submodule_name not in excluded_names:
+            replace_modules(submodule, replace_dict, excluded_names, submodule_name)
+    return module
+
+
+def transfer_bn_params(target, block_name, name):
+    args = [target.num_features, target.eps, target.momentum, target.affine]
+    kwargs = dict()
+    return args, kwargs
+
 
 
 def get_discriminator(model_config):
