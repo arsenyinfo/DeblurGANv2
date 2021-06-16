@@ -35,7 +35,8 @@ class Trainer:
         self._init_params()
         for epoch in range(0, self.config['num_epochs']):
             if (epoch == self.warmup_epochs) and not (self.warmup_epochs == 0):
-                self.netG.module.unfreeze()
+                for param in self.netG.module.parameters():
+                    param.requires_grad = True
                 self.optimizer_G = self._get_optim(self.netG.parameters())
                 self.scheduler_G = self._get_scheduler(self.optimizer_G)
             self._run_epoch(epoch)

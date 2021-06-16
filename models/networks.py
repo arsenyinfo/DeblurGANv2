@@ -1,13 +1,10 @@
-import torch
-import torch.nn as nn
 import functools
+
 import numpy as np
 import segmentation_models_pytorch as smp
-from models.fpn_mobilenet import FPNMobileNet
-from models.fpn_inception import FPNInception
-from models.fpn_inception_simple import FPNInceptionSimple
-from models.unet_seresnext import UNetSEResNext
-from models.fpn_densenet import FPNDense
+import torch.nn as nn
+
+
 ###############################################################################
 # Functions
 ###############################################################################
@@ -22,67 +19,10 @@ def get_norm_layer(norm_type='instance'):
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
     return norm_layer
 
+
 ##############################################################################
 # Classes
 ##############################################################################
-
-
-# Defines the generator that consists of Resnet blocks between a few
-# downsampling/upsampling operations.
-# Code and idea originally from Justin Johnson's architecture.
-# https://github.com/jcjohnson/fast-neural-style/
-class ResnetGenerator(nn.Module):
-    def __init__(self, input_nc=3, output_nc=3, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, use_parallel=True, learn_residual=True, padding_type='reflect'):
-        assert(n_blocks >= 0)
-        super(ResnetGenerator, self).__init__()
-        self.input_nc = input_nc
-        self.output_nc = output_nc
-        self.ngf = ngf
-        self.use_parallel = use_parallel
-        self.learn_residual = learn_residual
-        if type(norm_layer) == functools.partial:
-            use_bias = norm_layer.func == nn.InstanceNorm2d
-        else:
-            use_bias = norm_layer == nn.InstanceNorm2d
-
-        model = [nn.ReflectionPad2d(3),
-                 nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0,
-                           bias=use_bias),
-                 norm_layer(ngf),
-                 nn.ReLU(True)]
-
-        n_downsampling = 2
-        for i in range(n_downsampling):
-            mult = 2**i
-            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3,
-                                stride=2, padding=1, bias=use_bias),
-                      norm_layer(ngf * mult * 2),
-                      nn.ReLU(True)]
-
-        mult = 2**n_downsampling
-        for i in range(n_blocks):
-            model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
-
-        for i in range(n_downsampling):
-            mult = 2**(n_downsampling - i)
-            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
-                                         kernel_size=3, stride=2,
-                                         padding=1, output_padding=1,
-                                         bias=use_bias),
-                      norm_layer(int(ngf * mult / 2)),
-                      nn.ReLU(True)]
-        model += [nn.ReflectionPad2d(3)]
-        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
-        model += [nn.Tanh()]
-
-        self.model = nn.Sequential(*model)
-
-    def forward(self, input):
-        output = self.model(input)
-        if self.learn_residual:
-            output = input + output
-            output = torch.clamp(output,min = -1,max = 1)
-        return output
 
 
 # Define a resnet block
@@ -138,10 +78,10 @@ class DicsriminatorTail(nn.Module):
             use_bias = norm_layer == nn.InstanceNorm2d
 
         kw = 4
-        padw = int(np.ceil((kw-1)/2))
+        padw = int(np.ceil((kw - 1) / 2))
 
         nf_mult_prev = nf_mult
-        nf_mult = min(2**n_layers, 8)
+        nf_mult = min(2 ** n_layers, 8)
         sequence = [
             nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                       kernel_size=kw, stride=1, padding=padw, bias=use_bias),
@@ -167,7 +107,7 @@ class MultiScaleDiscriminator(nn.Module):
             use_bias = norm_layer == nn.InstanceNorm2d
 
         kw = 4
-        padw = int(np.ceil((kw-1)/2))
+        padw = int(np.ceil((kw - 1) / 2))
         sequence = [
             nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
             nn.LeakyReLU(0.2, True)
@@ -176,7 +116,7 @@ class MultiScaleDiscriminator(nn.Module):
         nf_mult = 1
         for n in range(1, 3):
             nf_mult_prev = nf_mult
-            nf_mult = min(2**n, 8)
+            nf_mult = min(2 ** n, 8)
             sequence += [
                 nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                           kernel_size=kw, stride=2, padding=padw, bias=use_bias),
@@ -223,7 +163,7 @@ class NLayerDiscriminator(nn.Module):
             use_bias = norm_layer == nn.InstanceNorm2d
 
         kw = 4
-        padw = int(np.ceil((kw-1)/2))
+        padw = int(np.ceil((kw - 1) / 2))
         sequence = [
             nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
             nn.LeakyReLU(0.2, True)
@@ -232,7 +172,7 @@ class NLayerDiscriminator(nn.Module):
         nf_mult = 1
         for n in range(1, n_layers):
             nf_mult_prev = nf_mult
-            nf_mult = min(2**n, 8)
+            nf_mult = min(2 ** n, 8)
             sequence += [
                 nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                           kernel_size=kw, stride=2, padding=padw, bias=use_bias),
@@ -241,7 +181,7 @@ class NLayerDiscriminator(nn.Module):
             ]
 
         nf_mult_prev = nf_mult
-        nf_mult = min(2**n_layers, 8)
+        nf_mult = min(2 ** n_layers, 8)
         sequence += [
             nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                       kernel_size=kw, stride=1, padding=padw, bias=use_bias),
@@ -268,10 +208,9 @@ def get_fullD(model_config):
 
 
 def get_generator(model_config: dict) -> nn.Module:
-    model = smp.FPN(encoder_name='timm-efficientnet-lite1', activation=None)
+    model = smp.FPN(encoder_name='timm-regnety_040', activation=None, classes=3)
     replace_dict = {nn.BatchNorm2d: (nn.InstanceNorm2d, transfer_bn_params)}
     model = replace_modules(model, replace_dict)
-    model = nn.Sequential(model, nn.Tanh())
     return nn.DataParallel(model)
 
 
@@ -301,7 +240,6 @@ def transfer_bn_params(target, block_name, name):
     args = [target.num_features, target.eps, target.momentum, target.affine]
     kwargs = dict()
     return args, kwargs
-
 
 
 def get_discriminator(model_config):
