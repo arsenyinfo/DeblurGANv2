@@ -4,6 +4,9 @@ import numpy as np
 import segmentation_models_pytorch as smp
 import torch.nn as nn
 
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 ###############################################################################
 # Functions
@@ -228,7 +231,9 @@ def replace_modules(module, replace_dict, excluded_names=None, name="features"):
             from_module = type(target_attr)
             to_module, fn = replace_dict[from_module]
             args, kwargs = fn(target_attr, name, attr_str)
-            setattr(module, attr_str, to_module(*args, **kwargs))
+            new_module = to_module(*args, **kwargs)
+            setattr(module, attr_str, new_module)
+            logger.info(f'Replaced {attr_str} with {new_module}')
 
     for submodule_name, submodule in module.named_children():
         if submodule_name not in excluded_names:

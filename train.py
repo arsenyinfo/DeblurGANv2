@@ -19,6 +19,9 @@ from models.networks import get_nets
 from schedulers import LinearDecay, WarmRestart
 from fire import Fire
 
+import coloredlogs
+
+coloredlogs.install('INFO')
 cv2.setNumThreads(0)
 
 
