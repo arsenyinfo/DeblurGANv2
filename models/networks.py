@@ -214,7 +214,7 @@ def get_generator(model_config: dict) -> nn.Module:
     model = smp.FPN(encoder_name='timm-regnety_040', activation=None, classes=3)
     replace_dict = {nn.BatchNorm2d: (nn.InstanceNorm2d, transfer_bn_params)}
     model = replace_modules(model, replace_dict)
-    return nn.DataParallel(model)
+    return nn.DataParallel(nn.Sequential(model, nn.Tanh()))
 
 
 def replace_modules(module, replace_dict, excluded_names=None, name="features"):
